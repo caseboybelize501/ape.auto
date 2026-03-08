@@ -29,10 +29,10 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 | **Phase 10: Authentication** | **✅ Complete** | **3** |
 | **Phase 11: Real-time Updates** | **✅ Complete** | **4** |
 | **Phase 12: Testing** | **✅ Complete** | **7** |
-| Phase 13: Observability | 🔲 Pending | - |
+| **Phase 13: Observability** | **✅ Complete** | **6** |
 | Phase 14: Production Hardening | 🔲 Pending | - |
 
-**Total: 105 files** | **Drift: ≤1%**
+**Total: 111 files** | **Drift: ≤1%**
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -573,6 +573,78 @@ tests/
 | engine/critic_*.py | 90%+ |
 | engine/topo_sorter.py | 85%+ |
 | server/models/auth.py | 90%+ |
+
+## Observability
+
+APE includes comprehensive observability with metrics, logging, and tracing.
+
+### Prometheus Metrics
+
+APE exposes metrics at `/metrics` for Prometheus scraping.
+
+**Key Metrics:**
+- `ape_generation_runs_total` - Total generation runs
+- `ape_generation_duration_seconds` - Generation duration histogram
+- `ape_critic_passes_total` - Critic pass results (pass/fail)
+- `ape_critic_repairs_total` - Repair attempts
+- `ape_critic_halts_total` - Generation halts (GATE-4)
+- `ape_deployments_total` - Deployment counts
+- `ape_production_health` - Production health status
+- `ape_regressions_total` - Production regressions
+- `ape_rollbacks_total` - Rollback count
+- `ape_api_requests_total` - API request counts
+- `ape_websocket_connections` - Active WebSocket connections
+
+### Structured Logging
+
+APE uses structlog for structured, contextual logging:
+
+```python
+from server.observability.logging_config import get_logger, LogContext
+
+logger = get_logger("generation")
+
+with LogContext(run_id="run-123", level=0):
+    logger.info("generation_started", file_count=5)
+```
+
+**Log Format (JSON):**
+```json
+{
+  "event": "generation_started",
+  "level": "info",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "run_id": "run-123",
+  "level": 0,
+  "file_count": 5
+}
+```
+
+### Distributed Tracing
+
+APE uses OpenTelemetry for distributed tracing:
+
+```python
+from server.observability.tracing import trace_request, get_tracer
+
+with trace_request("custom_operation"):
+    # Your code here
+    pass
+```
+
+**Supported Exporters:**
+- Console (development)
+- Jaeger
+- OTLP (OpenTelemetry Protocol)
+
+### Grafana Dashboards
+
+Pre-configured dashboards:
+- **APE Overview** - High-level metrics
+- **APE Pipeline** - Generation and critic details
+- **APE Production** - Deployment and regression monitoring
+
+Access Grafana at `http://localhost:3000` (default credentials: admin/admin)
 
 ## Pricing
 

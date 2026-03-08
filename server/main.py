@@ -29,9 +29,20 @@ from server.api import (
     websocket_router,
 )
 
+from server.observability.logging_config import setup_logging
+from server.observability.middleware import setup_metrics_middleware, create_metrics_endpoint
+from server.observability.tracing import setup_tracing
+
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
+    
+    # Setup observability
+    setup_logging(
+        log_level="INFO",
+        log_format="json",
+        environment="development"
+    )
     
     app = FastAPI(
         title="APE - Autonomous Production Engineer",
@@ -119,6 +130,11 @@ Autonomous Production Engineer takes requirements through:
     app.include_router(incidents_router, prefix="/api", tags=["incidents"])
     app.include_router(repos_router, prefix="/api", tags=["repos"])
     app.include_router(analytics_router, prefix="/api", tags=["analytics"])
+    
+    # Setup observability middleware and endpoints
+    setup_metrics_middleware(app)
+    create_metrics_endpoint(app)
+    setup_tracing(exporter="console")
     
     return app
 
