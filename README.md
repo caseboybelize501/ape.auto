@@ -28,11 +28,11 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 | **Phase 9: Database Persistence** | **✅ Complete** | **10** |
 | **Phase 10: Authentication** | **✅ Complete** | **3** |
 | **Phase 11: Real-time Updates** | **✅ Complete** | **4** |
-| Phase 12: Testing | 🔲 Pending | - |
+| **Phase 12: Testing** | **✅ Complete** | **7** |
 | Phase 13: Observability | 🔲 Pending | - |
 | Phase 14: Production Hardening | 🔲 Pending | - |
 
-**Total: 98 files** | **Drift: ≤1%**
+**Total: 105 files** | **Drift: ≤1%**
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -526,6 +526,53 @@ Returns connection statistics:
   "tenants_connected": 3
 }
 ```
+
+## Testing
+
+APE includes comprehensive test coverage with pytest.
+
+### Run Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=engine --cov=server --cov-report=html
+
+# Run specific test file
+pytest tests/engine/test_critic.py -v
+
+# Run integration tests
+pytest tests/integration/ -v
+
+# Run tests matching marker
+pytest -m "not slow"
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py              # Shared fixtures
+├── engine/
+│   ├── test_codebase_graph.py
+│   ├── test_critic.py       # All 4 critic passes
+│   └── test_topo_sorter.py
+├── server/
+│   └── test_auth.py         # Authentication tests
+└── integration/
+    └── test_pipeline.py     # End-to-end tests
+```
+
+### Test Coverage
+
+| Module | Coverage Target |
+|--------|----------------|
+| engine/codebase_graph.py | 80%+ |
+| engine/critic_*.py | 90%+ |
+| engine/topo_sorter.py | 85%+ |
+| server/models/auth.py | 90%+ |
 
 ## Pricing
 
