@@ -26,13 +26,13 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 |-------|--------|-------|
 | Phase 1-8: Core Platform | ✅ Complete | 81 |
 | **Phase 9: Database Persistence** | **✅ Complete** | **10** |
-| Phase 10: Authentication | 🔲 Pending | - |
+| **Phase 10: Authentication** | **✅ Complete** | **3** |
 | Phase 11: Real-time Updates | 🔲 Pending | - |
 | Phase 12: Testing | 🔲 Pending | - |
 | Phase 13: Observability | 🔲 Pending | - |
 | Phase 14: Production Hardening | 🔲 Pending | - |
 
-**Total: 91 files** | **Drift: ≤1%**
+**Total: 94 files** | **Drift: ≤1%**
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -387,6 +387,68 @@ Configured in `server/database/config.py`:
 - Max overflow: 40 connections
 - Pool recycle: 1 hour
 - Pre-ping enabled for connection health
+
+## Authentication
+
+APE uses JWT-based authentication with role-based access control (RBAC).
+
+### Login
+
+```bash
+POST /api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=your@email.com&password=yourpassword
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGc...",
+  "refresh_token": "eyJhbGc...",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
+```
+
+### Register
+
+```bash
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "email": "your@email.com",
+  "password": "yourpassword",
+  "name": "Your Name",
+  "tenant_name": "Your Company"
+}
+```
+
+### Refresh Token
+
+```bash
+POST /api/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "eyJhbGc..."
+}
+```
+
+### Role-Based Access Control
+
+| Role | Permissions |
+|------|-------------|
+| **Viewer** | Read requirements, architecture, deployments |
+| **Member** | Create/update requirements, approve GATE-1 & GATE-2 |
+| **Admin** | All permissions including GATE-3, user management, billing |
+
+### OAuth Login
+
+GitHub OAuth is supported for single sign-on:
+- `GET /api/auth/oauth/github` - Initiate OAuth flow
+- `GET /api/auth/oauth/github/callback` - OAuth callback
 
 ## Pricing
 
