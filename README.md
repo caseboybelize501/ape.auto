@@ -27,12 +27,12 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 | Phase 1-8: Core Platform | ✅ Complete | 81 |
 | **Phase 9: Database Persistence** | **✅ Complete** | **10** |
 | **Phase 10: Authentication** | **✅ Complete** | **3** |
-| Phase 11: Real-time Updates | 🔲 Pending | - |
+| **Phase 11: Real-time Updates** | **✅ Complete** | **4** |
 | Phase 12: Testing | 🔲 Pending | - |
 | Phase 13: Observability | 🔲 Pending | - |
 | Phase 14: Production Hardening | 🔲 Pending | - |
 
-**Total: 94 files** | **Drift: ≤1%**
+**Total: 98 files** | **Drift: ≤1%**
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -449,6 +449,83 @@ Content-Type: application/json
 GitHub OAuth is supported for single sign-on:
 - `GET /api/auth/oauth/github` - Initiate OAuth flow
 - `GET /api/auth/oauth/github/callback` - OAuth callback
+
+## Real-time Updates
+
+APE provides WebSocket-based real-time updates for generation progress, critic results, and notifications.
+
+### Connect to WebSocket
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/api/ws?token=YOUR_ACCESS_TOKEN');
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Received:', message);
+};
+```
+
+### Join a Generation Room
+
+```javascript
+// Join a room to receive updates for a specific generation run
+ws.send(JSON.stringify({
+  type: 'join_room',
+  room_id: 'run_123'  // Generation run ID
+}));
+```
+
+### Message Types
+
+| Type | Description |
+|------|-------------|
+| `generation.level_start` | A generation level started |
+| `generation.file_complete` | A file generation completed |
+| `generation.level_complete` | A level completed with critic results |
+| `generation.run_complete` | Entire generation run completed |
+| `critic.pass_result` | Critic pass result (1-4) |
+| `critic.repair_start` | Repair attempt started |
+| `critic.halt` | Generation halted (GATE-4 required) |
+| `notification` | System notification |
+| `gate_alert` | Gate approval required |
+| `production_alert` | Production regression/rollback alert |
+
+### Example: Monitor Generation Progress
+
+```javascript
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  
+  switch(msg.type) {
+    case 'generation.level_start':
+      console.log(`Level ${msg.level} starting with ${msg.file_count} files`);
+      break;
+    case 'generation.file_complete':
+      console.log(`${msg.file_path}: ${msg.status}`);
+      break;
+    case 'critic.halt':
+      console.error(`Generation halted at level ${msg.level}`);
+      // Redirect to GATE-4 page
+      break;
+  }
+};
+```
+
+### WebSocket Stats
+
+```bash
+GET /api/ws/stats
+```
+
+Returns connection statistics:
+```json
+{
+  "total_connections": 42,
+  "total_rooms": 5,
+  "users_connected": 12,
+  "tenants_connected": 3
+}
+```
 
 ## Pricing
 

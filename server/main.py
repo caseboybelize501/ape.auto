@@ -26,6 +26,7 @@ from server.api import (
     repos_router,
     analytics_router,
     auth_router,
+    websocket_router,
 )
 
 
@@ -108,6 +109,7 @@ Autonomous Production Engineer takes requirements through:
     
     # Register routers
     app.include_router(auth_router, prefix="/api", tags=["authentication"])
+    app.include_router(websocket_router, prefix="/api", tags=["websocket"])
     app.include_router(requirements_router, prefix="/api", tags=["requirements"])
     app.include_router(plans_router, prefix="/api", tags=["plans"])
     app.include_router(generations_router, prefix="/api", tags=["generations"])

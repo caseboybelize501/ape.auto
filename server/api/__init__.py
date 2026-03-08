@@ -15,6 +15,7 @@ from server.api.incidents import router as incidents_router
 from server.api.repos import router as repos_router
 from server.api.analytics import router as analytics_router
 from server.api.auth import router as auth_router
+from server.api.websocket import router as websocket_router
 
 __all__ = [
     "requirements_router",
@@ -27,4 +28,5 @@ __all__ = [
     "repos_router",
     "analytics_router",
     "auth_router",
+    "websocket_router",
 ]
