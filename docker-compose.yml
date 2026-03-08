@@ -1,0 +1,188 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # POSTGRESQL - Primary database
+  # ===========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ape-postgres
+    environment:
+      POSTGRES_USER: ape_user
+      POSTGRES_PASSWORD: ape_password
+      POSTGRES_DB: ape_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ape_user -d ape_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # REDIS - Celery broker & cache
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: ape-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # APE API Server
+  # ===========================================
+  ape-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ape-api
+    environment:
+      DATABASE_URL: postgresql://ape_user:ape_password@postgres:5432/ape_db
+      REDIS_URL: redis://redis:6379/0
+      APE_HOST: 0.0.0.0
+      APE_PORT: 8000
+      APE_LOG_LEVEL: info
+    volumes:
+      - ./logs:/app/logs
+      - ./artifacts:/app/artifacts
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # Celery Worker - Main pipeline execution
+  # ===========================================
+  ape-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ape-worker
+    command: celery -A server.workers.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql://ape_user:ape_password@postgres:5432/ape_db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./logs:/app/logs
+      - ./artifacts:/app/artifacts
+    depends_on:
+      - ape-api
+      - redis
+
+  # ===========================================
+  # Celery Beat - Scheduled tasks
+  # ===========================================
+  ape-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ape-beat
+    command: celery -A server.workers.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://ape_user:ape_password@postgres:5432/ape_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+
+  # ===========================================
+  # Flower - Celery monitoring
+  # ===========================================
+  ape-flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ape-flower
+    command: celery -A server.workers.celery_app flower --port=5555
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+  # ===========================================
+  # Minio - S3-compatible storage (optional)
+  # ===========================================
+  minio:
+    image: minio/minio:latest
+    container_name: ape-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ape_admin
+      MINIO_ROOT_PASSWORD: ape_admin_password
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ===========================================
+  # Prometheus - Metrics collection
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: ape-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ape-api
+
+  # ===========================================
+  # Grafana - Dashboards (optional)
+  # ===========================================
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: ape-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: ape-network

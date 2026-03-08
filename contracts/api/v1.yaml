@@ -1,0 +1,1068 @@
+openapi: 3.0.3
+info:
+  title: APE - Autonomous Production Engineer API
+  description: |
+    API for the Autonomous Production Engineer platform.
+    
+    ## Human Gates
+    - **GATE-1**: Plan approval (architecture + contracts)
+    - **GATE-2**: PR review approval
+    - **GATE-3**: Production deploy approval
+    - **GATE-4**: Halt resolution
+    
+    ## Flow
+    1. Submit requirement → Get RequirementSpec
+    2. Review & approve plan (GATE-1)
+    3. Monitor generation progress
+    4. Review & approve PR (GATE-2)
+    5. Approve production deploy (GATE-3)
+    6. Monitor production (auto-repair or GATE-4 on halt)
+  version: 1.0.0
+  contact:
+    name: APE Support
+    email: support@ape.auto
+
+servers:
+  - url: https://api.ape.auto/v1
+    description: Production server
+  - url: http://localhost:8000/v1
+    description: Local development
+
+tags:
+  - name: requirements
+    description: Requirement submission and management
+  - name: plans
+    description: Architecture plan review and approval
+  - name: generations
+    description: Code generation monitoring
+  - name: critic
+    description: Critic results and logs
+  - name: prs
+    description: Pull request management
+  - name: deployments
+    description: Deployment management
+  - name: incidents
+    description: Production incident management
+  - name: repos
+    description: Repository management
+  - name: analytics
+    description: Usage analytics and metrics
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags:
+        - health
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: 1.0.0
+
+  /requirements:
+    post:
+      summary: Submit a new requirement
+      operationId: submitRequirement
+      tags:
+        - requirements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - repo_id
+              properties:
+                text:
+                  type: string
+                  description: Raw requirement text
+                  example: "Add rate limiting to /api/users endpoint - max 100 requests per minute per IP"
+                repo_id:
+                  type: string
+                  description: Target repository ID
+                priority:
+                  type: string
+                  enum: [low, medium, high, critical]
+                  default: medium
+                source:
+                  type: string
+                  enum: [manual, ticket, prd, voice]
+                  default: manual
+                source_id:
+                  type: string
+                  description: Original ticket/PRD ID
+      responses:
+        '201':
+          description: Requirement submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementSubmissionResponse'
+        '400':
+          description: Invalid input
+        '404':
+          description: Repository not found
+
+    get:
+      summary: List requirements
+      operationId: listRequirements
+      tags:
+        - requirements
+      parameters:
+        - name: repo_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, approved, in_progress, completed, failed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of requirements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequirementSpec'
+
+  /requirements/{req_id}:
+    get:
+      summary: Get requirement details
+      operationId: getRequirement
+      tags:
+        - requirements
+      parameters:
+        - name: req_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Requirement details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementSpec'
+        '404':
+          description: Requirement not found
+
+  /requirements/{req_id}/ambiguity:
+    patch:
+      summary: Resolve an ambiguity
+      operationId: resolveAmbiguity
+      tags:
+        - requirements
+      parameters:
+        - name: req_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: question_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - answer
+              properties:
+                answer:
+                  type: string
+                  description: Human-provided answer
+      responses:
+        '200':
+          description: Ambiguity resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementSpec'
+
+  /plans/{req_id}:
+    get:
+      summary: Get architecture plan for a requirement
+      operationId: getArchitecturePlan
+      tags:
+        - plans
+      parameters:
+        - name: req_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Architecture plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchitecturePlan'
+        '404':
+          description: Plan not found
+
+  /plans/{req_id}/approve:
+    post:
+      summary: Approve architecture plan (GATE-1)
+      operationId: approvePlan
+      tags:
+        - plans
+      description: |
+        **GATE-1: Human approval required**
+        
+        Approves the architecture plan and contracts.
+        After approval, code generation begins.
+      parameters:
+        - name: req_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approved
+              properties:
+                approved:
+                  type: boolean
+                  description: Approval decision
+                notes:
+                  type: string
+                  description: Optional notes
+      responses:
+        '200':
+          description: Plan approved - generation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanApprovalResponse'
+        '400':
+          description: Invalid approval request
+
+  /generations:
+    get:
+      summary: List generation runs
+      operationId: listGenerations
+      tags:
+        - generations
+      parameters:
+        - name: req_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, in_progress, completed, failed, blocked]
+      responses:
+        '200':
+          description: List of generation runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GenerationRun'
+
+  /generations/{run_id}:
+    get:
+      summary: Get generation run details
+      operationId: getGeneration
+      tags:
+        - generations
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Generation run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationRun'
+        '404':
+          description: Run not found
+
+  /generations/{run_id}/levels/{level}:
+    get:
+      summary: Get generation results for a specific level
+      operationId: getGenerationLevel
+      tags:
+        - generations
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: level
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Level results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelGenerationResult'
+
+  /critic/{run_id}/level/{level}:
+    get:
+      summary: Get critic results for a level
+      operationId: getCriticResults
+      tags:
+        - critic
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: level
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Critic results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CriticResults'
+
+  /critic/{run_id}/halt:
+    get:
+      summary: Get halt report
+      operationId: getHaltReport
+      tags:
+        - critic
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Halt report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HaltReport'
+        '404':
+          description: No halt report found
+
+  /prs/{run_id}:
+    get:
+      summary: Get PR for a generation run
+      operationId: getPR
+      tags:
+        - prs
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PR details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PullRequest'
+        '404':
+          description: PR not found
+
+  /prs/{run_id}/approve:
+    post:
+      summary: Approve PR (GATE-2)
+      operationId: approvePR
+      tags:
+        - prs
+      description: |
+        **GATE-2: Human approval required**
+        
+        Approves the pull request for merge to staging.
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approved
+              properties:
+                approved:
+                  type: boolean
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: PR approved - deploying to staging
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PRApprovalResponse'
+
+  /deployments/{deployment_id}:
+    get:
+      summary: Get deployment details
+      operationId: getDeployment
+      tags:
+        - deployments
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deployment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{deployment_id}/approve:
+    post:
+      summary: Approve production deploy (GATE-3)
+      operationId: approveDeployment
+      tags:
+        - deployments
+      description: |
+        **GATE-3: Human approval required**
+        
+        Approves promotion from staging to production.
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approved
+              properties:
+                approved:
+                  type: boolean
+      responses:
+        '200':
+          description: Deployment approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployApprovalResponse'
+
+  /production/{deployment_id}:
+    get:
+      summary: Get production monitoring status
+      operationId: getProductionStatus
+      tags:
+        - deployments
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Production status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionStatus'
+
+  /incidents/{incident_id}:
+    get:
+      summary: Get incident details
+      operationId: getIncident
+      tags:
+        - incidents
+      parameters:
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Incident details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+
+  /incidents/{incident_id}/respond:
+    post:
+      summary: Respond to GATE-4 halt
+      operationId: respondToGate4
+      tags:
+        - incidents
+      description: |
+        **GATE-4: Human response to halt**
+        
+        Provide response to a critic or repair halt.
+      parameters:
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - response_type
+              properties:
+                response_type:
+                  type: string
+                  enum: [modify_architecture, modify_requirement, manual_fix, skip_file, rollback]
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Response recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gate4Response'
+
+  /repos:
+    get:
+      summary: List connected repositories
+      operationId: listRepos
+      tags:
+        - repos
+      responses:
+        '200':
+          description: List of repos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Repo'
+    post:
+      summary: Connect a new repository
+      operationId: connectRepo
+      tags:
+        - repos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - platform
+                - owner
+                - name
+              properties:
+                platform:
+                  type: string
+                  enum: [github, gitlab]
+                owner:
+                  type: string
+                name:
+                  type: string
+                ci_platform:
+                  type: string
+                  enum: [github_actions, jenkins, argocd, gitlab_ci]
+      responses:
+        '201':
+          description: Repository connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repo'
+
+  /analytics:
+    get:
+      summary: Get usage analytics
+      operationId: getAnalytics
+      tags:
+        - analytics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month, year]
+          default: month
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analytics'
+
+components:
+  schemas:
+    RequirementSubmissionResponse:
+      type: object
+      properties:
+        req_id:
+          type: string
+        spec:
+          $ref: '#/components/schemas/RequirementSpec'
+        ambiguities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+
+    RequirementSpec:
+      type: object
+      properties:
+        id:
+          type: string
+        repo_id:
+          type: string
+        raw_text:
+          type: string
+        functional:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionalRequirement'
+        non_functional:
+          type: array
+          items:
+            $ref: '#/components/schemas/NonFunctionalRequirement'
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/Criterion'
+        ambiguities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+        status:
+          type: string
+          enum: [draft, submitted, ambiguous, approved, in_progress, blocked, completed, failed]
+
+    FunctionalRequirement:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        verb:
+          type: string
+        noun:
+          type: string
+
+    NonFunctionalRequirement:
+      type: object
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        metric:
+          type: string
+
+    Criterion:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        testable:
+          type: boolean
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+        question:
+          type: string
+        context:
+          type: string
+        resolved:
+          type: boolean
+
+    ArchitecturePlan:
+      type: object
+      properties:
+        id:
+          type: string
+        requirement_spec_id:
+          type: string
+        modified_modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleChange'
+        new_modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleSpec'
+        risk_flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Risk'
+        status:
+          type: string
+
+    ModuleChange:
+      type: object
+      properties:
+        path:
+          type: string
+        change_type:
+          type: string
+          enum: [create, modify, delete, refactor, move]
+        description:
+          type: string
+
+    ModuleSpec:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        description:
+          type: string
+
+    Risk:
+      type: object
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+        level:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+
+    PlanApprovalResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+        build_plan:
+          $ref: '#/components/schemas/BuildPlan'
+
+    BuildPlan:
+      type: object
+      properties:
+        id:
+          type: string
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Level'
+        total_files:
+          type: integer
+        status:
+          type: string
+
+    Level:
+      type: object
+      properties:
+        level:
+          type: integer
+        files:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+
+    GenerationRun:
+      type: object
+      properties:
+        id:
+          type: string
+        requirement_spec_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed, blocked]
+        current_level:
+          type: integer
+        total_levels:
+          type: integer
+        level_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LevelCriticResult'
+
+    LevelCriticResult:
+      type: object
+      properties:
+        level:
+          type: integer
+        file_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileCriticResult'
+        level_result:
+          type: string
+          enum: [pending, pass, fail, halt]
+
+    FileCriticResult:
+      type: object
+      properties:
+        path:
+          type: string
+        pass1:
+          type: string
+        pass2:
+          type: string
+        pass3:
+          type: string
+        pass4:
+          type: string
+        repair_count:
+          type: integer
+
+    LevelGenerationResult:
+      type: object
+      properties:
+        level:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedFile'
+        status:
+          type: string
+
+    GeneratedFile:
+      type: object
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+        content:
+          type: string
+
+    CriticResults:
+      type: object
+      properties:
+        run_id:
+          type: string
+        level:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileCriticResult'
+
+    HaltReport:
+      type: object
+      properties:
+        id:
+          type: string
+        level:
+          type: integer
+        file_path:
+          type: string
+        failing_passes:
+          type: array
+          items:
+            type: string
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepairAttempt'
+        recommended_action:
+          type: string
+
+    RepairAttempt:
+      type: object
+      properties:
+        attempt_number:
+          type: integer
+        changes_made:
+          type: string
+        success:
+          type: boolean
+
+    PullRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        pr_number:
+          type: integer
+        pr_url:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, open, approved, merged, closed]
+        ci_status:
+          type: string
+
+    PRApprovalResponse:
+      type: object
+      properties:
+        deploy_id:
+          type: string
+        staging_url:
+          type: string
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        environment:
+          type: string
+          enum: [staging, production, shadow]
+        status:
+          type: string
+        health_status:
+          type: string
+
+    DeployApprovalResponse:
+      type: object
+      properties:
+        promoted:
+          type: boolean
+        monitoring_active:
+          type: boolean
+
+    ProductionStatus:
+      type: object
+      properties:
+        signals:
+          type: array
+          items:
+            type: object
+        regressions:
+          type: array
+          items:
+            type: object
+        repairs:
+          type: array
+          items:
+            type: object
+        status:
+          type: string
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Gate4Response:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        response_recorded:
+          type: boolean
+        next_action:
+          type: string
+
+    Repo:
+      type: object
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+        owner:
+          type: string
+        name:
+          type: string
+        full_name:
+          type: string
+        connection_status:
+          type: string
+
+    Analytics:
+      type: object
+      properties:
+        period:
+          type: string
+        total_runs:
+          type: integer
+        successful_runs:
+          type: integer
+        average_cycle_time_minutes:
+          type: number
+        critic_pass_rates:
+          type: object
+        deployments:
+          type: integer
+        rollbacks:
+          type: integer
