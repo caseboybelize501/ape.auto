@@ -30,9 +30,9 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 | **Phase 11: Real-time Updates** | **✅ Complete** | **4** |
 | **Phase 12: Testing** | **✅ Complete** | **7** |
 | **Phase 13: Observability** | **✅ Complete** | **6** |
-| Phase 14: Production Hardening | 🔲 Pending | - |
+| **Phase 14: Production Hardening** | **✅ Complete** | **5** |
 
-**Total: 111 files** | **Drift: ≤1%**
+**Total: 116 files** | **Drift: ≤1%** | **Status: 100% Complete**
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -645,6 +645,83 @@ Pre-configured dashboards:
 - **APE Production** - Deployment and regression monitoring
 
 Access Grafana at `http://localhost:3000` (default credentials: admin/admin)
+
+## Production Hardening
+
+APE is production-ready with comprehensive hardening features.
+
+### Kubernetes Deployment
+
+```bash
+# Deploy to Kubernetes
+kubectl apply -f k8s/production.yaml
+
+# Or use Helm
+helm install ape ./helm/ape-auto -f values.yaml
+```
+
+### Horizontal Pod Autoscaling
+
+| Component | Min Replicas | Max Replicas | Target CPU | Target Memory |
+|-----------|--------------|--------------|------------|---------------|
+| API | 3 | 10 | 70% | 80% |
+| Workers | 6 | 20 | 70% | 80% |
+
+### Rate Limiting
+
+| Tier | Requests/Minute | Burst Size |
+|------|-----------------|------------|
+| Starter | 10 | 20 |
+| Growth | 100 | 200 |
+| Enterprise | 1000 | 2000 |
+
+### Circuit Breakers
+
+External services protected by circuit breakers:
+- GitHub/GitLab APIs
+- LLM providers (OpenAI, Anthropic)
+- Database connections
+- Redis connections
+
+**Configuration:**
+- Failure threshold: 5 consecutive failures
+- Reset timeout: 60 seconds
+- Half-open max calls: 3
+
+### Backup & Disaster Recovery
+
+| Tier | RTO | RPO | Backup Frequency |
+|------|-----|-----|------------------|
+| Starter | 4h | 24h | Daily |
+| Growth | 1h | 1h | Hourly |
+| Enterprise | 15m | 5m | Continuous |
+
+### Health Checks
+
+| Endpoint | Type | Purpose |
+|----------|------|---------|
+| `/health` | Liveness | Basic health |
+| `/health/ready` | Readiness | Ready for traffic |
+| `/health/live` | Liveness | Process alive |
+| `/health/startup` | Startup | App started |
+
+### Graceful Shutdown
+
+1. Stop accepting new requests
+2. Complete in-flight requests (max 30s)
+3. Finish current Celery tasks
+4. Close database connections
+5. Flush logs
+6. Exit
+
+### Security
+
+- Network policies (pod-to-pod restrictions)
+- Pod security contexts (non-root, dropped capabilities)
+- Pod disruption budgets (high availability)
+- Secrets management (Kubernetes Secrets, Vault integration)
+
+See [docs/PRODUCTION_HARDENING.md](docs/PRODUCTION_HARDENING.md) for details.
 
 ## Pricing
 

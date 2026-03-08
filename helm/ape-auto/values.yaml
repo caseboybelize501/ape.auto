@@ -1,0 +1,204 @@
+# Default values for ape-auto
+
+# Global settings
+global:
+  imageRegistry: ""
+  storageClass: ""
+
+# APE API settings
+api:
+  replicaCount: 3
+  image:
+    repository: ape-auto
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    hosts:
+      - host: ape.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+# Celery worker settings
+worker:
+  replicaCount: 6
+  image:
+    repository: ape-auto
+    tag: latest
+    pullPolicy: Always
+  concurrency: 4
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 4Gi
+      cpu: 2000m
+  autoscaling:
+    enabled: true
+    minReplicas: 6
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# Celery beat settings
+beat:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 250m
+
+# Flower (Celery monitoring) settings
+flower:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 5555
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 250m
+
+# PostgreSQL settings
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "changeme"
+    username: ape_user
+    password: "changeme"
+    database: ape_db
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+
+# Redis settings
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "changeme"
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 4Gi
+        cpu: 500m
+  replica:
+    replicaCount: 0
+
+# Configuration
+config:
+  apeHost: "0.0.0.0"
+  apePort: 8000
+  logLevel: "info"
+  debug: false
+  llmProvider: "openai"
+  llmModel: "gpt-4-turbo-preview"
+  jwtAlgorithm: "HS256"
+  jwtExpirationMinutes: 60
+
+# Secrets (should be managed externally in production)
+secrets:
+  secretKey: "change-me-in-production-min-32-chars"
+  databasePassword: "changeme"
+  redisPassword: "changeme"
+  githubToken: ""
+  openaiApiKey: ""
+  anthropicApiKey: ""
+
+# Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+
+# Rate limiting and circuit breaker
+rateLimit:
+  enabled: true
+  requestsPerMinute: 100
+  burstSize: 200
+
+circuitBreaker:
+  enabled: true
+  failureThreshold: 5
+  resetTimeoutSeconds: 60
+  halfOpenRequests: 3
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retentionDays: 7
+  database:
+    enabled: true
+  artifacts:
+    enabled: true
+
+# High availability
+highAvailability:
+  enabled: true
+  podDisruptionBudget:
+    api:
+      minAvailable: 2
+    worker:
+      minAvailable: 3
+  podAntiAffinity:
+    enabled: true
+    weight: 100
+
+# Graceful shutdown
+gracefulShutdown:
+  enabled: true
+  timeoutSeconds: 30
