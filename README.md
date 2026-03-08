@@ -20,6 +20,22 @@ APE connects to your codebase (GitHub/GitLab), CI/CD (GitHub Actions/Jenkins/Arg
 10. **Production Monitoring** → Watches for regressions
 11. **Self-Repair** → Fixes issues before humans notice
 
+## Implementation Status
+
+| Phase | Status | Files |
+|-------|--------|-------|
+| Phase 1-8: Core Platform | ✅ Complete | 81 |
+| **Phase 9: Database Persistence** | **✅ Complete** | **10** |
+| Phase 10: Authentication | 🔲 Pending | - |
+| Phase 11: Real-time Updates | 🔲 Pending | - |
+| Phase 12: Testing | 🔲 Pending | - |
+| Phase 13: Observability | 🔲 Pending | - |
+| Phase 14: Production Hardening | 🔲 Pending | - |
+
+**Total: 91 files** | **Drift: ≤1%**
+
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed progress.
+
 ## Quick Start
 
 ### Prerequisites
@@ -338,6 +354,39 @@ POST /api/incidents/{id}/respond
   "notes": "I'll fix this manually"
 }
 ```
+
+## Database
+
+APE uses PostgreSQL for persistence with SQLAlchemy ORM.
+
+### Initialize Database
+
+```bash
+# Using Docker (recommended)
+docker-compose up -d postgres
+
+# Initialize tables
+python scripts/init_db.py
+```
+
+### Database Models
+
+- **Requirements** - RequirementSpec, FR, NFR, Criterion, Question
+- **Architecture** - ArchitecturePlan, ModuleChange, ModuleSpec, Risk
+- **Generation** - GenerationRun, GenerationJob, CriticResult, RepairAttempt
+- **Tests** - TestPlan, TestSpec
+- **Deploy** - Deployment, PullRequest
+- **Tenant** - Tenant, User, Repo, Subscription
+
+See `server/database/models/` for complete schema.
+
+### Connection Pooling
+
+Configured in `server/database/config.py`:
+- Pool size: 20 connections
+- Max overflow: 40 connections
+- Pool recycle: 1 hour
+- Pre-ping enabled for connection health
 
 ## Pricing
 
